@@ -5,15 +5,69 @@
 # The input should be the BED file output by the original gCNV pipeline.
 ###############################################################################
 suppressPackageStartupMessages(library(data.table))
+suppressPackageStartupMessages(library(stringr))
 
 CALLS_FILE <- commandArgs(trailingOnly=TRUE)[1]
 OUTPUT_FILE <- commandArgs(trailingOnly=TRUE)[2]
 
 calls <- fread(CALLS_FILE, sep='\t')
 calls[, c("PASS_SAMPLE", "PASS_QS", "PASS_FREQ", "HIGH_QUALITY") := list(NULL)]
+calls[, c("vaf", "vac") := list(NULL)]
+
+###############################################################################
+# Compute variant counts and frequencies
+###############################################################################
+new_calls <- calls[, session_id := .I][, c("chr", "start", "end", "session_id")]
+gcnv_uniq <- unique(new_calls, by=c("chr", "start", "end"))
+setnames(gcnv_uniq, "session_id", "name")
+gcnv_uniq[, c("sample", "svtype") := .("SAMPLE", "TYPE")]
+
+fwrite(gcnv_uniq, "unique.bed", col.names=FALSE, sep="\t")
+system2("svtk", args=c("bedcluster", "unique.bed", "unique_clustered.bed"))
+
+svtk_master <- fread("unique_clustered.bed")
+setnames(svtk_master, "#chrom", "chr")
+setkey(svtk_master, call_name)
+
+file.remove("unique.bed", "unique_clustered.bed")
+
+#' Split the call names in the SVTK bedcluster output and reshape to long.
+#'
+#' The svtk bedcluster command produces an output in which call names
+#' (from the same cluster?) are merged into a single table entry. We split
+#' them so each gets its own row.
+split_pivot_calls <- function(x) {
+    calls <- str_split(x$call_name, ",")
+    lens <- vapply(calls, FUN=length, FUN.VALUE=integer(1))
+    expanded <- data.table(call_name=rep(x$call_name, lens), tmp=unlist(calls))
+    setkey(expanded, call_name)
+    merged <- x[expanded, on="call_name"][, !"call_name"]
+    setnames(merged, "tmp", "call_name")
+    return(merged)
+}
+
+svtk_master <- split_pivot_calls(svtk_master)[, c("name", "call_name")]
+setnames(svtk_master, "name", "clustered_id")
+svtk_master[, "call_name" := as.integer(call_name)]
+
+setkey(svtk_master, call_name)
+setkey(gcnv_uniq, name)
+gcnv_uniq <- gcnv_uniq[svtk_master, on=c("name"="call_name")]
+gcnv_uniq[, clustered_id := str_replace(clustered_id, "prefix_", "variant_")]
+cluster_calls <- gcnv_uniq[new_calls, on=c("chr", "start", "end"), mult="first", nomatch=NA]
+
+ids <- cluster_calls$session_id
+calls[ids, "variant_name" := cluster_calls$clustered_id]
+
+site_count <- table(calls$variant_name)
+site_freq <- site_count / length(unique(calls$sample))
+
+mat <- match(calls$variant_name, names(site_freq))
+calls$sf <- as.numeric(site_freq[mat])
+calls$sc <- as.numeric(site_count[mat])
+
 
 autosomes <- calls[chr %in% paste0("chr", 1:22)]
-
 ###############################################################################
 # Sample-level filtering
 # 1. Samples that have more than 200 calls fail.
