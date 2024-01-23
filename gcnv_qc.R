@@ -7,8 +7,12 @@
 suppressPackageStartupMessages(library(data.table))
 suppressPackageStartupMessages(library(stringr))
 
-CALLS_FILE <- commandArgs(trailingOnly=TRUE)[1]
-OUTPUT_FILE <- commandArgs(trailingOnly=TRUE)[2]
+ARGV <- commandArgs(trailingOnly=TRUE)
+if (length(ARGV) != 2) {
+    stop("Usage: Rscript gcnv_qc.R INPUT OUTPUT")
+}
+CALLS_FILE <- ARGV[1]
+OUTPUT_FILE <- ARGV[2]
 
 calls <- fread(CALLS_FILE, sep='\t')
 calls[, c("PASS_SAMPLE", "PASS_QS", "PASS_FREQ", "HIGH_QUALITY") := list(NULL)]
@@ -22,14 +26,18 @@ gcnv_uniq <- unique(new_calls, by=c("chr", "start", "end"))
 setnames(gcnv_uniq, "session_id", "name")
 gcnv_uniq[, c("sample", "svtype") := .("SAMPLE", "TYPE")]
 
+on.exit(file.remove("unique.bed", "unique_clustered.bed"), add=TRUE)
+
 fwrite(gcnv_uniq, "unique.bed", col.names=FALSE, sep="\t")
-system2("svtk", args=c("bedcluster", "unique.bed", "unique_clustered.bed"))
+rtn <- system2("svtk", args=c("bedcluster", "unique.bed", "unique_clustered.bed"))
+if (rtn != 0) {
+    stop("clustering failed")
+}
 
 svtk_master <- fread("unique_clustered.bed")
 setnames(svtk_master, "#chrom", "chr")
 setkey(svtk_master, call_name)
 
-file.remove("unique.bed", "unique_clustered.bed")
 
 #' Split the call names in the SVTK bedcluster output and reshape to long.
 #'
