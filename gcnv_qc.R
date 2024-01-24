@@ -26,15 +26,18 @@ gcnv_uniq <- unique(new_calls, by=c("chr", "start", "end"))
 setnames(gcnv_uniq, "session_id", "name")
 gcnv_uniq[, c("sample", "svtype") := .("SAMPLE", "TYPE")]
 
-on.exit(file.remove("unique.bed", "unique_clustered.bed"), add=TRUE)
+svtk_master <- tryCatch(
+    {
+        fwrite(gcnv_uniq, "unique.bed", col.names=FALSE, sep="\t")
+        rtn <- system2("svtk", args=c("bedcluster", "unique.bed", "unique_clustered.bed"))
+        if (rtn != 0) {
+            stop("clustering failed")
+        }
+        fread("unique_clustered.bed", sep="\t")
+    },
+    finally=file.remove("unique.bed", "unique_clustered.bed")
+)
 
-fwrite(gcnv_uniq, "unique.bed", col.names=FALSE, sep="\t")
-rtn <- system2("svtk", args=c("bedcluster", "unique.bed", "unique_clustered.bed"))
-if (rtn != 0) {
-    stop("clustering failed")
-}
-
-svtk_master <- fread("unique_clustered.bed")
 setnames(svtk_master, "#chrom", "chr")
 setkey(svtk_master, call_name)
 
