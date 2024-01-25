@@ -1,3 +1,5 @@
+#!/usr/bin/env Rscript
+
 ###############################################################################
 # Filter the output of gCNV using quality metrics.
 # Usage: Rscript gcnv_qc.R INPUT OUTPUT
@@ -14,10 +16,13 @@ if (length(ARGV) != 2) {
 CALLS_FILE <- ARGV[1]
 OUTPUT_FILE <- ARGV[2]
 
+message(sprintf("Input is %s", CALLS_FILE))
+message(sprintf("Output is %s", OUTPUT_FILE))
 calls <- fread(CALLS_FILE, sep='\t')
 calls[, c("PASS_SAMPLE", "PASS_QS", "PASS_FREQ", "HIGH_QUALITY") := list(NULL)]
 calls[, c("vaf", "vac") := list(NULL)]
 
+message("Read calls file")
 ###############################################################################
 # Compute variant counts and frequencies
 ###############################################################################
@@ -37,6 +42,7 @@ svtk_master <- tryCatch(
     },
     finally=file.remove("unique.bed", "unique_clustered.bed")
 )
+message("Ran svtk bedcluster")
 
 setnames(svtk_master, "#chrom", "chr")
 setkey(svtk_master, call_name)
@@ -76,7 +82,7 @@ site_freq <- site_count / length(unique(calls$sample))
 mat <- match(calls$variant_name, names(site_freq))
 calls$sf <- as.numeric(site_freq[mat])
 calls$sc <- as.numeric(site_count[mat])
-
+message("Completed variant clustering")
 
 autosomes <- calls[chr %in% paste0("chr", 1:22)]
 ###############################################################################
@@ -97,6 +103,7 @@ autosomes <- calls[chr %in% paste0("chr", 1:22)]
 qs_metrics <- autosomes[, list(n=.N, qs20=sum(QS > 20)), by="sample"]
 qs_metrics[, PASS_SAMPLE := n <= 200 & qs20 <= 35]
 calls <- calls[qs_metrics[, c("sample", "PASS_SAMPLE")], on="sample"]
+message("Completed sample filtering")
 
 thresh_del <- pmin(pmax(calls$NP * 10, 100), 1000)
 thresh_dup <- pmin(pmax(calls$NP * 4, 50), 400)
@@ -107,5 +114,7 @@ thresh[calls$CN == 0] <- pmax(thresh_del[calls$CN == 0], 400)
 calls$PASS_QS <- calls$QS >= thresh
 calls$PASS_FREQ <- calls$sf < 0.01
 calls$HIGH_QUALITY <- calls$NP >= 3 & calls$PASS_SAMPLE & calls$PASS_QS & calls$PASS_FREQ
+message("Completed QS filtering")
 
 fwrite(calls, quote=FALSE, sep="\t", file=OUTPUT_FILE)
+message("Writing results")
