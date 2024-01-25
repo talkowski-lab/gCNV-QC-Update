@@ -36,6 +36,8 @@ task qc {
     RuntimeAttr? runtime_attr_override
   }
 
+  String annotation_name = basename(cnv_annotations, ".bed")
+
   RuntimeAttr default_attr = object {
     mem_gb: 16,
     cpu_cores: 1,
@@ -47,12 +49,11 @@ task qc {
   RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
 
   command <<<
-    Rscript /scripts/gcnv_qc.R ~{cnv_annotations} ~{cnv_annotations}.tmp
-    mv ~{cnv_annotations}.tmp ~{cnv_annotations}
+    gcnv_qc.R ~{cnv_annotations} ~{annotation_name}_with_qc.bed
   >>>
 
   output {
-      File annotations_with_qc = cnv_annotations
+      File annotations_with_qc = "~{annotation_name}_with_qc.bed"
   }
 
   runtime {
