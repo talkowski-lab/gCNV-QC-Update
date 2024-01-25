@@ -1,4 +1,5 @@
-FROM r-base:4.3.2
+ARG R_VERSION=4.3.2
+FROM --platform=$BUILDPLATFORM r-base:${R_VERSION}
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -8,6 +9,7 @@ RUN apt-get update \
         libhts-dev \
         libhts3 \
         python3-boto3 \
+        python3-dev \
         python3-natsort \
         python3-numpy \
         python3-pandas \
@@ -35,6 +37,7 @@ RUN cd /opt \
     && pip3 install --break-system-packages --editable ./svtk
 
 RUN mkdir /scripts
-COPY --chmod=644 gcnv_qc.R /scripts/gcnv_qc.R
+COPY --chmod=755 gcnv_qc.R /scripts/gcnv_qc.R
+RUN ln -s /scripts/gcnv_qc.R /usr/local/bin/gcnv_qc.R
 
-CMD ["bash"]
+CMD []
