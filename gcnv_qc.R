@@ -84,7 +84,7 @@ calls$sf <- as.numeric(site_freq[mat])
 calls$sc <- as.numeric(site_count[mat])
 message("Completed variant clustering")
 
-autosomes <- calls[chr %in% paste0("chr", 1:22)]
+autosomes <- calls[!grepl("X|Y|M", chr)]
 ###############################################################################
 # Sample-level filtering
 # 1. Samples that have more than 200 calls fail.
