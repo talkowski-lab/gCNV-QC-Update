@@ -1,5 +1,5 @@
-ARG R_VERSION=4.3.2
-FROM --platform=$BUILDPLATFORM r-base:${R_VERSION}
+ARG R_VERSION=4.3.3
+FROM --platform=$BUILDPLATFORM rocker/r-ver:${R_VERSION}
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -34,7 +34,7 @@ RUN install2.r --error data.table stringr \
 # sub-packages.
 RUN cd /opt \
     && git clone 'https://github.com/talkowski-lab/svtk.git' \
-    && pip3 install --break-system-packages --editable ./svtk
+    && pip3 install --no-cache-dir --editable ./svtk
 
 RUN mkdir /scripts
 COPY --chmod=755 gcnv_qc.R /scripts/gcnv_qc.R
